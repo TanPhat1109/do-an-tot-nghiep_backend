@@ -96,10 +96,39 @@ def search_similar_chunks(
             "score": score
         })
 
+    
     results.sort(
         key=lambda item: item["score"],
         reverse=True
     )
+
+    # HIỂN THỊ KẾT QUẢ TÌM KIẾM ĐỂ KIỂM TRA
+    print(f"\n[RAG] Tổng số chunks: {len(rows)}")
+    print("[RAG] Top 5 kết quả:")
+
+    for item in results[:5]:
+        print(
+            f"Document ID: {item['document_id']} | "
+            f"Chunk: {item['chunk_index']} | "
+            f"Similarity: {item['score']:.4f}"
+        )
+        print(f"Nội dung: {item['content'][:200]}")
+        print("-" * 50)
+
+    # Lọc theo ngưỡng similarity
+    SIMILARITY_THRESHOLD = 0.65
+
+    print(f"[RAG] Ngưỡng similarity: {SIMILARITY_THRESHOLD}")
+
+    filtered_results = [
+        item for item in results
+        if item["score"] >= SIMILARITY_THRESHOLD
+    ]
+
+    print(f"[RAG] Số chunks đạt ngưỡng: {len(filtered_results)}")
+
+    return filtered_results[:top_k]
+
 
     # Lọc theo ngưỡng similarity
     SIMILARITY_THRESHOLD = 0.65

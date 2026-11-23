@@ -79,9 +79,7 @@ def test_ai(
         )
 
 
-# ==============================
 # CHAT WITH AI + RAG
-# ==============================
 
 @router.post("/chat", response_model=ChatResponse)
 def chat_with_ai(

@@ -9,6 +9,9 @@ from sqlalchemy.orm import Session
 from database import get_db
 from services.document_service import ingest_document
 
+from fastapi import status
+from sqlalchemy.orm import joinedload 
+
 router = APIRouter(
     prefix="/documents",
     tags=["Documents"]
@@ -100,4 +103,84 @@ def upload_document(
         raise HTTPException(
             status_code=500,
             detail=f"Không thể xử lý tài liệu: {str(e)}"
+        )
+
+# =========================
+# LẤY DANH SÁCH TÀI LIỆU
+# =========================
+
+@router.get("/")
+def get_documents(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.require_admin)
+):
+    documents = (
+        db.query(models.Document)
+        .order_by(models.Document.created_at.desc())
+        .all()
+    )
+
+    return {
+        "success": True,
+        "total": len(documents),
+        "documents": [
+            {
+                "id": doc.id,
+                "filename": doc.filename,
+                "file_type": doc.file_type,
+                "status": doc.status,
+                "created_at": doc.created_at.isoformat()
+                if doc.created_at else None,
+                "total_chunks": len(doc.chunks),
+            }
+            for doc in documents
+        ]
+    }
+
+
+# =========================
+# XÓA TÀI LIỆU
+# =========================
+
+@router.delete("/{document_id}")
+def delete_document(
+    document_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.require_admin)
+):
+    document = (
+        db.query(models.Document)
+        .filter(models.Document.id == document_id)
+        .first()
+    )
+
+    if not document:
+        raise HTTPException(
+            status_code=404,
+            detail="Không tìm thấy tài liệu"
+        )
+
+    try:
+        file_path = Path(document.file_path)
+
+        # Xóa tài liệu trong database.
+        # Cascade sẽ xóa các document_chunks liên quan.
+        db.delete(document)
+        db.commit()
+
+        # Xóa file vật lý sau khi database đã xóa thành công.
+        if file_path.exists():
+            file_path.unlink()
+
+        return {
+            "success": True,
+            "message": "Đã xóa tài liệu thành công",
+            "document_id": document_id
+        }
+
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Không thể xóa tài liệu: {str(e)}"
         )

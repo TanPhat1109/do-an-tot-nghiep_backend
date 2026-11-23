@@ -87,6 +87,13 @@ class Conversation(Base):
 
     created_at = Column(DateTime, default=utcnow, nullable=False)
 
+    updated_at = Column(
+    DateTime,
+    default=utcnow,
+    onupdate=utcnow,
+    nullable=False
+)
+
     owner = relationship("User", back_populates="conversations")
 
     messages = relationship(

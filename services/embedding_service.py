@@ -1,5 +1,6 @@
 
 import os
+import time
 import requests
 from pathlib import Path
 from dotenv import load_dotenv
@@ -14,6 +15,12 @@ if not JINA_API_KEY:
 
 API_URL = "https://api.jina.ai/v1/embeddings"
 MODEL = "jina-embeddings-v5-text-small"
+
+# Số lần gọi tối đa: 2 (lần đầu + 1 lần thử lại)
+MAX_RETRIES = 1
+
+# Timeout kết nối 5 giây, chờ phản hồi tối đa 20 giây
+TIMEOUT = (5, 20)
 
 
 def embed_text(text: str, task: str = "retrieval.passage") -> list[float]:
@@ -32,20 +39,50 @@ def embed_text(text: str, task: str = "retrieval.passage") -> list[float]:
         "normalized": True
     }
 
-    response = requests.post(
-        API_URL,
-        headers=headers,
-        json=payload,
-        timeout=90
-    )
+    for attempt in range(MAX_RETRIES + 1):
+        try:
+            start_time = time.perf_counter()
 
-    if response.status_code != 200:
-        print("Jina API error:", response.status_code)
-        print(response.text)
-        raise RuntimeError("Không thể tạo embedding")
+            response = requests.post(
+                API_URL,
+                headers=headers,
+                json=payload,
+                timeout=TIMEOUT
+            )
 
-    result = response.json()
-    return result["data"][0]["embedding"]
+            response.raise_for_status()
+
+            result = response.json()
+            embedding = result["data"][0]["embedding"]
+
+            elapsed = time.perf_counter() - start_time
+            print(f"Jina Embedding: {elapsed:.2f} giây")
+
+            return embedding
+
+        except (requests.Timeout, requests.ConnectionError) as e:
+            print(
+                f"Jina kết nối thất bại "
+                f"(lần {attempt + 1}/{MAX_RETRIES + 1}): {e}"
+            )
+
+            if attempt < MAX_RETRIES:
+                time.sleep(1)
+                continue
+
+            raise RuntimeError(
+                "Jina AI không phản hồi. Vui lòng thử lại sau."
+            ) from e
+
+        except requests.HTTPError as e:
+            print("Jina API HTTP error:", e.response.status_code)
+            print(e.response.text)
+            raise RuntimeError("Jina API trả về lỗi") from e
+
+        except (KeyError, IndexError, TypeError, ValueError) as e:
+            raise RuntimeError(
+                "Dữ liệu embedding Jina trả về không hợp lệ"
+            ) from e
 
 
 def embed_passage(text: str) -> list[float]:
